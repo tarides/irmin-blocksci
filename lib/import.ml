@@ -5,11 +5,6 @@ let parse_output_id s =
   | [ tx_id; vout ] -> (int_of_string tx_id, int_of_string vout)
   | _ -> failwith ("Invalid output ID: " ^ s)
 
-let parse_address_id s =
-  match String.split_on_char ':' s with
-  | [ _; id ] -> id
-  | _ -> failwith ("Invalid address ID: " ^ s)
-
 let import_blocks store dir =
   let path = Eio.Path.(dir / "nodes" / "blocks.csv") in
   let csv = Csv.load (Eio.Path.native_exn path) in

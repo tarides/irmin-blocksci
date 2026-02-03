@@ -6,6 +6,8 @@ homepage:     "https://github.com/tarides/irmin-blocksci"
 bug-reports:  "https://github.com/tarides/irmin-blocksci/issues"
 license:      "ISC"
 depends: [
+  "ocaml" {>= "5.1"}
+  "dune" {>= "3.0"}
   "lwt_eio"
   "index"
   "irmin-watcher"
@@ -16,6 +18,7 @@ depends: [
   "csv"
   "cmdliner"
   "ppx_irmin"
+  "odoc" {with-doc}
 ]
 
 pin-depends: [

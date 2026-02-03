@@ -1,3 +1,4 @@
 (library
  (name blocksci)
+ (public_name irmin-blocksci)
  (libraries irmin irmin-pack.unix eio csv))

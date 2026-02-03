@@ -16,6 +16,10 @@ make switch
 # Build
 make build
 
+# Generate documentation
+dune build @doc
+# Output: _build/default/_doc/_html/index.html
+
 # Clean
 make clean
 ```
@@ -45,7 +49,12 @@ Requires OCaml 5.1+. All pin-depends are declared in `irmin-blocksci.opam`, so `
 - `types.ml` - Data types (block, transaction, output, input, address) with JSON serialization
 - `store.ml` - Irmin store configuration using `Irmin.Contents.String`, path helpers for hierarchical storage
 - `import.ml` - CSV parsing for BlockSci export files (nodes + relationships)
-- `query.ml` - Query functions: block traversal, transaction details, address balance, path finding
+- `query.ml` - Query functions with equivalent Cypher queries documented in odoc comments:
+  - `get_block`, `get_transaction`, `get_output`, `get_address` - basic lookups
+  - `block_transactions`, `tx_inputs`, `tx_outputs` - graph traversals
+  - `address_outputs`, `address_balance` - address queries
+  - `block_chain`, `block_with_coinbase`, `tx_details` - aggregate queries
+  - `PathFinder.find_path_between_outputs`, `PathFinder.find_path_between_addresses` - path finding
 
 ### Binary (`bin/`)
 
