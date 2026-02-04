@@ -92,20 +92,36 @@ cp -r /tmp/irmin-blocksci-store ./local-store
 
 ### Benchmark (`bench/`)
 
-Benchmark application implementing queries from the BlockSci paper Table 7 with Cypher equivalents documented in odoc comments.
+Benchmark application implementing queries from the BlockSci paper and `queries.cypher` with Cypher equivalents documented in odoc comments.
 
 **Run:**
 ```bash
 dune exec bench/benchmark.exe -- /tmp/irmin-blocksci-store
 ```
 
-**Queries (from BlockSci paper Table 7):**
+**Paper Queries (Table 7):**
 - Q1: Count transactions with locktime > 0
 - Q2: Find maximum output value
 - Q3: Find maximum transaction fee
 - Q4: Sum outputs to a specific address (Satoshi Dice style)
 - Q5: Count zero-conf outputs (spent in same block as created)
 - Q6: Locktime change heuristic (privacy analysis)
+
+**Additional Queries:**
+- Sum output value, Sum fees, Max input value
+- Tx version > 1, Input count, Output count
+
+**Basic Counts:**
+- Block count, Transaction count, Spent outputs, UTXOs
+
+**Block Statistics:**
+- Avg/Max transactions per block
+
+**Advanced Queries:**
+- High-fee transactions (>10 BTC), Multi-input transactions (>10 inputs)
+
+**Verification Queries:**
+- Genesis block, Block 170 tx count, Script type distribution
 
 ### Store Schema
 
