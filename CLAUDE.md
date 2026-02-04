@@ -37,6 +37,12 @@ dune exec irmin-blocksci -- query balance <address_id> # Query address balance
 dune exec irmin-blocksci -- query chain <start> -n <count>  # Query block range
 dune exec irmin-blocksci -- query output <tx_id:vout>  # Query output
 dune exec irmin-blocksci -- query info                 # Show store info (last block height)
+
+# Start GraphQL server
+dune exec irmin-blocksci -- serve                      # Start on default port 8080
+dune exec irmin-blocksci -- serve -p 3000              # Start on custom port
+# GraphiQL UI: http://localhost:8080/graphiql
+# API endpoint: http://localhost:8080/graphql
 ```
 
 ## Dependencies
@@ -57,10 +63,14 @@ Requires OCaml 5.1+. All pin-depends are declared in `irmin-blocksci.opam`, so `
   - `block_chain`, `block_with_coinbase`, `tx_details` - aggregate queries
   - `last_block_height` - get highest block in store
   - `PathFinder.find_path_between_outputs`, `PathFinder.find_path_between_addresses` - path finding
+- `graphql_server.ml` - GraphQL server with blockchain-specific queries:
+  - `block`, `transaction`, `output`, `address` - single entity lookups
+  - `blockTransactions`, `addressOutputs`, `blockChain` - list queries
+  - `addressBalance`, `storeInfo` - computed values
 
 ### Binary (`bin/`)
 
-- `main.ml` - CLI using Cmdliner with `import` and `query` subcommands
+- `main.ml` - CLI using Cmdliner with `import`, `query`, and `serve` subcommands
 
 ### Store Schema
 
