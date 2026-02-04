@@ -7,7 +7,7 @@
  * Output format: CSV with columns Query,Time_ms,Result
  *
  * Build:
- *   cd ~/caml/irmin-blocksci/c_example && make benchmark
+ *   cd ~/caml/irmin-blocksci/c_bin && make benchmark
  *
  * Run (store must be beneath cwd due to Eio sandbox):
  *   cp -r /tmp/irmin-blocksci-store ./local-store

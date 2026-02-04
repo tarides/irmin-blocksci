@@ -1,4 +1,4 @@
-# C Example for irmin-blocksci
+# C Binaries for irmin-blocksci
 
 This directory contains a proof of concept for querying the irmin-blocksci store from C
 using the libirmin C bindings.
@@ -17,7 +17,7 @@ The C bindings work with the **Eio branch** of Irmin, but require:
 cp -r /tmp/irmin-blocksci-store ./local-store
 
 # Run from parent of store (store is "beneath" cwd)
-./c_example/query_block ./local-store
+./c_bin/query_block ./local-store
 ```
 
 ### Why these constraints?
@@ -46,13 +46,13 @@ curl -X POST http://localhost:8080/graphql \
 cd ~/caml/irmin-eio && dune build src/libirmin/lib/
 
 # Compile this example
-cd ~/caml/irmin-blocksci/c_example
+cd ~/caml/irmin-blocksci/c_bin
 make
 
 # Copy store to local directory and run
 cp -r /tmp/irmin-blocksci-store ../local-store
 cd ..
-./c_example/query_block ./local-store
+./c_bin/query_block ./local-store
 ```
 
 ## Output
@@ -80,13 +80,13 @@ A C port of the OCaml benchmark (`bench/benchmark.ml`) is also available:
 
 ```bash
 # Build
-cd ~/caml/irmin-blocksci/c_example
+cd ~/caml/irmin-blocksci/c_bin
 make benchmark
 
 # Run (store must be beneath cwd)
 cp -r /tmp/irmin-blocksci-store ../local-store
 cd ..
-./c_example/benchmark ./local-store
+./c_bin/benchmark ./local-store
 ```
 
 Output (CSV format):

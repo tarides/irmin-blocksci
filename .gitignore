@@ -3,6 +3,9 @@ _opam/
 *.install
 .merlin
 export/
-c_example/query_block
-c_example/benchmark
+c_bin/query_block
+c_bin/benchmark
 .envrc
+local-store/
+import
+import.log

@@ -141,7 +141,7 @@ See `queries.cypher` for the equivalent Cypher queries.
   - `graphql_server.ml` - GraphQL API
 - `bin/` - CLI application
 - `bench/` - Benchmark suite
-- `c_example/` - C bindings example
+- `c_bin/` - C bindings example
 
 ## Dependencies
 
