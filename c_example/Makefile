@@ -13,15 +13,21 @@ LDFLAGS = -L$(IRMIN_DIR) -L$(IRMIN_INSTALL) -Wl,-rpath,$(IRMIN_DIR)
 # libirmin requires OCaml runtime libraries
 LIBS = -lirmin
 
-.PHONY: all clean run
+.PHONY: all clean run run-benchmark
 
-all: query_block
+all: query_block benchmark
 
 query_block: query_block.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) $(LIBS)
+
+benchmark: benchmark.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) $(LIBS)
 
 run: query_block
 	LD_LIBRARY_PATH=$(IRMIN_DIR):$(IRMIN_INSTALL) ./query_block
 
+run-benchmark: benchmark
+	LD_LIBRARY_PATH=$(IRMIN_DIR):$(IRMIN_INSTALL) ./benchmark
+
 clean:
-	rm -f query_block
+	rm -f query_block benchmark

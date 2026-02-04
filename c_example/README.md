@@ -74,7 +74,31 @@ cd ..
 Done!
 ```
 
+## Benchmark
+
+A C port of the OCaml benchmark (`bench/benchmark.ml`) is also available:
+
+```bash
+# Build
+cd ~/caml/irmin-blocksci/c_example
+make benchmark
+
+# Run (store must be beneath cwd)
+cp -r /tmp/irmin-blocksci-store ../local-store
+cd ..
+./c_example/benchmark ./local-store
+```
+
+Output (CSV format):
+```
+Query,Time_ms,Result
+Block count,123.456,274195
+Tx count,234.567,101558
+...
+```
+
 ## Files
 
 - `query_block.c` - C code demonstrating the libirmin API
+- `benchmark.c` - C port of the benchmark suite
 - `Makefile` - Build configuration

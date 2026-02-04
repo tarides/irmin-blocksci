@@ -4,4 +4,5 @@ _opam/
 .merlin
 export/
 c_example/query_block
+c_example/benchmark
 .envrc
