@@ -3,3 +3,4 @@ _opam/
 *.install
 .merlin
 export/
+c_example/query_block
