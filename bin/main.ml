@@ -286,6 +286,8 @@ let serve_cmd env =
   let run port store_path =
     Eio.Switch.run @@ fun sw ->
     let fs = Eio.Stdenv.fs env in
+    let clock = Eio.Stdenv.clock env in
+    Lwt_eio.with_event_loop ~clock @@ fun _token ->
     run_with_store ~sw ~fs store_path (fun main ->
         Lwt_eio.run_lwt (fun () -> Graphql_server.start_server ~port main))
   in
