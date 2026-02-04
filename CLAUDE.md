@@ -90,6 +90,27 @@ cp -r /tmp/irmin-blocksci-store ./local-store
 
 **Path constraints:** Eio uses `openat2` with `RESOLVE_BENEATH` - store path must be relative and beneath the working directory (no `..` or absolute paths).
 
+### Benchmark (`bench/`)
+
+Benchmark application implementing queries from the BlockSci paper with Cypher equivalents documented in odoc comments.
+
+**Run:**
+```bash
+dune exec bench/benchmark.exe -- /tmp/irmin-blocksci-store
+```
+
+**Queries:**
+- Q1: Count transactions in block range
+- Q2: Sum output values in block range
+- Q3: Count multi-input transactions (clustering candidates)
+- Q4: Total fees in block range
+- Q5: UTXO statistics (count and value)
+- Q6: Average transaction size
+- Q7: Coinbase rewards per block
+- Q8: Script type distribution
+- Q9: High-value transactions (> threshold BTC)
+- Q10: Block statistics summary
+
 ### Store Schema
 
 ```

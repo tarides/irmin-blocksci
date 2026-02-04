@@ -1,0 +1,4 @@
+(executable
+ (name benchmark)
+ (public_name irmin-blocksci-bench)
+ (libraries blocksci unix eio_main))
