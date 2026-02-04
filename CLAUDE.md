@@ -72,6 +72,24 @@ Requires OCaml 5.1+. All pin-depends are declared in `irmin-blocksci.opam`, so `
 
 - `main.ml` - CLI using Cmdliner with `import`, `query`, and `serve` subcommands
 
+### C Example (`c_example/`)
+
+Proof of concept for querying the store from C using libirmin bindings.
+
+**Build:**
+```bash
+cd ~/caml/irmin-eio && dune build src/libirmin/lib/  # Build libirmin first
+cd ~/caml/irmin-blocksci/c_example && make
+```
+
+**Run (store must be beneath cwd due to Eio sandbox):**
+```bash
+cp -r /tmp/irmin-blocksci-store ./local-store
+./c_example/query_block ./local-store
+```
+
+**Path constraints:** Eio uses `openat2` with `RESOLVE_BENEATH` - store path must be relative and beneath the working directory (no `..` or absolute paths).
+
 ### Store Schema
 
 ```
