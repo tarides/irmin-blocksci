@@ -329,6 +329,19 @@ module PathFinder = struct
     try_paths from_outputs
 end
 
+(** Get the height of the last (highest) block in the store.
+
+    {v
+    MATCH (b:Block)
+    RETURN max(b.height) AS lastHeight
+    v} *)
+let last_block_height store =
+  let keys = Store.list store [ "block" ] in
+  List.fold_left
+    (fun acc key ->
+      match int_of_string_opt key with Some h -> max acc h | None -> acc)
+    (-1) keys
+
 (** {1 Pretty printing} *)
 
 (** Print block details to stdout. *)

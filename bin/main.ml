@@ -190,6 +190,32 @@ let query_chain_cmd env =
   let info = Cmd.info "chain" ~doc in
   Cmd.v info Term.(const run $ start_height $ count $ store_path)
 
+let query_info_cmd env =
+  let doc = "Show store information (last block height, etc.)" in
+  let store_path =
+    Arg.(
+      value
+      & opt string default_store
+      & info [ "s"; "store" ] ~docv:"PATH" ~doc:"Path to the Irmin store")
+  in
+  let run store_path =
+    Eio.Switch.run @@ fun sw ->
+    let fs = Eio.Stdenv.fs env in
+    run_with_store ~sw ~fs store_path (fun main ->
+        let last_height = Query.last_block_height main in
+        if last_height < 0 then Printf.printf "Store is empty (no blocks)\n"
+        else begin
+          Printf.printf "Last block height: %d\n" last_height;
+          match Query.get_block main last_height with
+          | Some block ->
+              Printf.printf "Last block hash: %s\n" block.hash;
+              Printf.printf "Last block timestamp: %Ld\n" block.timestamp
+          | None -> ()
+        end)
+  in
+  let info = Cmd.info "info" ~doc in
+  Cmd.v info Term.(const run $ store_path)
+
 let query_output_cmd env =
   let doc = "Query an output by tx_id:vout" in
   let output_ref =
@@ -241,6 +267,7 @@ let query_cmd env =
       query_balance_cmd env;
       query_chain_cmd env;
       query_output_cmd env;
+      query_info_cmd env;
     ]
 
 let main_cmd env =
@@ -260,6 +287,7 @@ let main_cmd env =
           `P "query balance ADDRESS - Query balance for ADDRESS";
           `P "query chain START [-n COUNT] - Query blocks from START";
           `P "query output TX_ID:VOUT - Query output";
+          `P "query info - Show store information (last block height)";
         ]
   in
   Cmd.group info ~default:Term.(ret (const (`Help (`Pager, None))))
