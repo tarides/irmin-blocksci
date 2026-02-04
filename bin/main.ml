@@ -270,6 +270,28 @@ let query_cmd env =
       query_info_cmd env;
     ]
 
+let serve_cmd env =
+  let doc = "Start GraphQL server for querying blockchain data" in
+  let port =
+    Arg.(
+      value & opt int 8080
+      & info [ "p"; "port" ] ~docv:"PORT" ~doc:"Port to listen on (default: 8080)")
+  in
+  let store_path =
+    Arg.(
+      value
+      & opt string default_store
+      & info [ "s"; "store" ] ~docv:"PATH" ~doc:"Path to the Irmin store")
+  in
+  let run port store_path =
+    Eio.Switch.run @@ fun sw ->
+    let fs = Eio.Stdenv.fs env in
+    run_with_store ~sw ~fs store_path (fun main ->
+        Lwt_eio.run_lwt (fun () -> Graphql_server.start_server ~port main))
+  in
+  let info = Cmd.info "serve" ~doc in
+  Cmd.v info Term.(const run $ port $ store_path)
+
 let main_cmd env =
   let doc = "BlockSci data stored in Irmin" in
   let info =
@@ -288,10 +310,11 @@ let main_cmd env =
           `P "query chain START [-n COUNT] - Query blocks from START";
           `P "query output TX_ID:VOUT - Query output";
           `P "query info - Show store information (last block height)";
+          `P "serve [-p PORT] - Start GraphQL server";
         ]
   in
   Cmd.group info ~default:Term.(ret (const (`Help (`Pager, None))))
-    [ import_cmd env; query_cmd env ]
+    [ import_cmd env; query_cmd env; serve_cmd env ]
 
 let () =
   Eio_main.run @@ fun env ->

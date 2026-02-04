@@ -1,4 +1,4 @@
 (executable
  (name main)
  (public_name irmin-blocksci)
- (libraries blocksci eio_main cmdliner))
+ (libraries blocksci eio_main cmdliner lwt_eio))

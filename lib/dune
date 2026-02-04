@@ -1,4 +1,4 @@
 (library
  (name blocksci)
  (public_name irmin-blocksci)
- (libraries irmin irmin-pack.unix eio csv))
+ (libraries irmin irmin-pack.unix eio csv graphql-lwt cohttp-lwt-unix yojson))

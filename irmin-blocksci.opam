@@ -18,6 +18,8 @@ depends: [
   "csv"
   "cmdliner"
   "ppx_irmin"
+  "graphql-lwt"
+  "cohttp-lwt-unix"
   "odoc" {with-doc}
 ]
 
