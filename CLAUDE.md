@@ -27,7 +27,7 @@ make clean
 ## Usage
 
 ```bash
-# Import BlockSci CSV export into Irmin store
+# Import BlockSci CSV export into Irmin store (supports incremental import)
 dune exec irmin-blocksci -- import <csv-export-dir>
 
 # Query commands
@@ -36,6 +36,7 @@ dune exec irmin-blocksci -- query tx <tx_id>           # Query transaction by ID
 dune exec irmin-blocksci -- query balance <address_id> # Query address balance
 dune exec irmin-blocksci -- query chain <start> -n <count>  # Query block range
 dune exec irmin-blocksci -- query output <tx_id:vout>  # Query output
+dune exec irmin-blocksci -- query info                 # Show store info (last block height)
 ```
 
 ## Dependencies
@@ -48,12 +49,13 @@ Requires OCaml 5.1+. All pin-depends are declared in `irmin-blocksci.opam`, so `
 
 - `types.ml` - Data types (block, transaction, output, input, address) with JSON serialization
 - `store.ml` - Irmin store configuration using `Irmin.Contents.String`, path helpers for hierarchical storage
-- `import.ml` - CSV parsing for BlockSci export files (nodes + relationships)
+- `import.ml` - CSV parsing for BlockSci export files (nodes + relationships), supports incremental import
 - `query.ml` - Query functions with equivalent Cypher queries documented in odoc comments:
   - `get_block`, `get_transaction`, `get_output`, `get_address` - basic lookups
   - `block_transactions`, `tx_inputs`, `tx_outputs` - graph traversals
   - `address_outputs`, `address_balance` - address queries
   - `block_chain`, `block_with_coinbase`, `tx_details` - aggregate queries
+  - `last_block_height` - get highest block in store
   - `PathFinder.find_path_between_outputs`, `PathFinder.find_path_between_addresses` - path finding
 
 ### Binary (`bin/`)
@@ -73,6 +75,7 @@ Requires OCaml 5.1+. All pin-depends are declared in `irmin-blocksci.opam`, so `
 /index/addr_outputs/<addr>/<ref>     -> OutputRef
 /index/output_addr/<tx_id>/<vout>    -> AddrRef
 /index/spent_by/<tx_id>/<vout>       -> TxRef (which tx spent this output)
+/meta/block_tx_count/<height>        -> Meta (tx count for incremental import)
 ```
 
 ### CSV Export Format (from Neo4j)
