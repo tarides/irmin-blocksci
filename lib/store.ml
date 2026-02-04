@@ -47,6 +47,42 @@ let set store path entity =
   let json = Types.entity_to_json entity in
   Store.set_exn ~info:(fun () -> info "import") store path json
 
+(* Batch operations for efficient bulk imports *)
+module Batch = struct
+  type t = {
+    store : Store.t;
+    mutable tree : Store.tree;
+    mutable count : int;
+    batch_size : int;
+  }
+
+  let create ?(batch_size = 10000) store =
+    let tree =
+      match Store.Head.find store with
+      | Some commit -> Store.Commit.tree commit
+      | None -> Store.Tree.empty ()
+    in
+    { store; tree; count = 0; batch_size }
+
+  let set batch path entity =
+    let json = Types.entity_to_json entity in
+    batch.tree <- Store.Tree.add batch.tree path json;
+    batch.count <- batch.count + 1;
+    if batch.count >= batch.batch_size then begin
+      Store.set_tree_exn ~info:(fun () -> info "batch import") batch.store [] batch.tree;
+      batch.count <- 0
+    end
+
+  let flush batch =
+    if batch.count > 0 then begin
+      Store.set_tree_exn ~info:(fun () -> info "batch import") batch.store [] batch.tree;
+      batch.count <- 0
+    end
+
+  let mem batch path =
+    Store.Tree.mem batch.tree path
+end
+
 let get store path =
   match Store.find store path with
   | None -> None
