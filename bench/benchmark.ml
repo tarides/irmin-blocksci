@@ -1,29 +1,107 @@
 (** Benchmark queries from BlockSci paper and queries.cypher.
 
     This application benchmarks typical blockchain analysis queries
-    as described in the BlockSci paper, with their Cypher equivalents. *)
+    as described in the BlockSci paper, with their Cypher equivalents.
+
+    Output format: CSV with columns Query,Time_ms,Result *)
 
 open Blocksci
 
 (** {1 Timing utilities} *)
 
+let results = ref []
+
 let time_it name f =
   let start = Unix.gettimeofday () in
   let result = f () in
   let elapsed = Unix.gettimeofday () -. start in
-  Printf.printf "  %s: %.3f ms\n%!" name (elapsed *. 1000.0);
+  let time_ms = elapsed *. 1000.0 in
+  results := (name, time_ms, result) :: !results;
   result
+
+(** {1 Basic Counts} *)
+
+(** Block count.
+
+    {v
+    MATCH (b:Block)
+    RETURN count(b) AS value;
+    v} *)
+let block_count store = Query.last_block_height store + 1
+
+(** Tx count.
+
+    {v
+    MATCH (t:Transaction)
+    RETURN count(t) AS value;
+    v} *)
+let tx_count store =
+  let last_height = Query.last_block_height store in
+  let count = ref 0 in
+  for height = 0 to last_height do
+    let txs = Query.block_transactions store height in
+    count := !count + List.length txs
+  done;
+  !count
+
+(** Input count.
+
+    {v
+    MATCH ()-[r:TX_INPUT]->()
+    RETURN count(r) AS value;
+    v} *)
+let input_count store =
+  let last_height = Query.last_block_height store in
+  let count = ref 0 in
+  for height = 0 to last_height do
+    let txs = Query.block_transactions store height in
+    List.iter
+      (fun (tx : Types.transaction) ->
+        let inputs = Query.tx_inputs store tx.tx_id in
+        count := !count + List.length inputs)
+      txs
+  done;
+  !count
+
+(** Output count.
+
+    {v
+    MATCH (o:Output)
+    RETURN count(o) AS value;
+    v} *)
+let output_count store =
+  let last_height = Query.last_block_height store in
+  let count = ref 0 in
+  for height = 0 to last_height do
+    let txs = Query.block_transactions store height in
+    List.iter
+      (fun (tx : Types.transaction) ->
+        let outputs = Query.tx_outputs store tx.tx_id in
+        count := !count + List.length outputs)
+      txs
+  done;
+  !count
+
+(** Address count.
+
+    {v
+    MATCH (a:Address)
+    RETURN count(a) AS value;
+    v} *)
+let address_count store =
+  let keys = Store.list store [ "address" ] in
+  List.length keys
 
 (** {1 Paper Queries (Table 7)} *)
 
-(** Q1: Count transactions with locktime > 0.
+(** Tx locktime > 0.
 
     {v
     MATCH (t:Transaction)
     WHERE t.locktime > 0
     RETURN count(t) AS value;
     v} *)
-let q1_locktime_nonzero store =
+let tx_locktime_gt_0 store =
   let last_height = Query.last_block_height store in
   let count = ref 0 in
   for height = 0 to last_height do
@@ -35,13 +113,13 @@ let q1_locktime_nonzero store =
   done;
   !count
 
-(** Q2: Find maximum output value.
+(** Max output value.
 
     {v
     MATCH (o:Output)
     RETURN max(o.value) AS value;
     v} *)
-let q2_max_output_value store =
+let max_output_value store =
   let last_height = Query.last_block_height store in
   let max_val = ref 0L in
   for height = 0 to last_height do
@@ -58,13 +136,13 @@ let q2_max_output_value store =
   done;
   !max_val
 
-(** Q3: Find maximum transaction fee.
+(** Calculate fee (max fee).
 
     {v
     MATCH (t:Transaction)
     RETURN max(t.fee) AS value;
     v} *)
-let q3_max_fee store =
+let calculate_fee store =
   let last_height = Query.last_block_height store in
   let max_fee = ref 0L in
   for height = 0 to last_height do
@@ -76,93 +154,15 @@ let q3_max_fee store =
   done;
   !max_fee
 
-(** Q4: Sum of outputs to a specific address (e.g., Satoshi Dice).
+(** {1 Additional Queries} *)
 
-    {v
-    MATCH (a:Address)<-[:TO_ADDRESS]-(o:Output)
-    WHERE id(a) = ADDRESS_ID
-    RETURN sum(o.value) AS value;
-    v} *)
-let q4_address_total_received store address_id =
-  let outputs = Query.address_outputs store address_id in
-  List.fold_left
-    (fun acc (o : Types.output) -> Int64.add acc o.out_value)
-    0L outputs
-
-(** Q5: Count zero-conf outputs (spent in same block as created).
-
-    {v
-    MATCH (t1:Transaction)-[:TX_OUTPUT]->(o:Output)<-[:TX_INPUT]-(t2:Transaction)
-    WHERE t1.blockHeight = t2.blockHeight
-    RETURN count(o) AS value;
-    v} *)
-let q5_zero_conf_outputs store =
-  let last_height = Query.last_block_height store in
-  let count = ref 0 in
-  for height = 0 to last_height do
-    let txs = Query.block_transactions store height in
-    List.iter
-      (fun (tx : Types.transaction) ->
-        let inputs = Query.tx_inputs store tx.tx_id in
-        List.iter
-          (fun (inp : Types.input) ->
-            match Query.get_transaction store inp.in_spent_tx_id with
-            | Some prev_tx when prev_tx.tx_block_height = tx.tx_block_height ->
-                incr count
-            | _ -> ())
-          inputs)
-      txs
-  done;
-  !count
-
-(** Q6: Locktime change heuristic.
-
-    {v
-    MATCH (t1:Transaction)-[:TX_OUTPUT]->(o:Output)<-[:TX_INPUT]-(t2:Transaction)
-    WHERE (t1.locktime > 0) = (t2.locktime > 0)
-    WITH t1, count(o) AS matching_count
-    WHERE matching_count = 1
-    RETURN count(t1) AS value;
-    v} *)
-let q6_locktime_change store =
-  let last_height = Query.last_block_height store in
-  let tx_matching_counts = Hashtbl.create 1000 in
-  for height = 0 to last_height do
-    let txs = Query.block_transactions store height in
-    List.iter
-      (fun (tx : Types.transaction) ->
-        let tx_has_locktime = tx.tx_locktime > 0L in
-        let inputs = Query.tx_inputs store tx.tx_id in
-        List.iter
-          (fun (inp : Types.input) ->
-            match Query.get_transaction store inp.in_spent_tx_id with
-            | Some prev_tx ->
-                let prev_has_locktime = prev_tx.tx_locktime > 0L in
-                if tx_has_locktime = prev_has_locktime then begin
-                  let current =
-                    match Hashtbl.find_opt tx_matching_counts prev_tx.tx_id with
-                    | Some n -> n
-                    | None -> 0
-                  in
-                  Hashtbl.replace tx_matching_counts prev_tx.tx_id (current + 1)
-                end
-            | None -> ())
-          inputs)
-      txs
-  done;
-  Hashtbl.fold
-    (fun _ count acc -> if count = 1 then acc + 1 else acc)
-    tx_matching_counts 0
-
-(** {1 Additional Queries (not in Table 7)} *)
-
-(** Sum of all output values.
+(** Total output value.
 
     {v
     MATCH (o:Output)
     RETURN sum(o.value) AS value;
     v} *)
-let sum_output_value store =
+let total_output_value store =
   let last_height = Query.last_block_height store in
   let total = ref 0L in
   for height = 0 to last_height do
@@ -177,13 +177,13 @@ let sum_output_value store =
   done;
   !total
 
-(** Sum of all transaction fees.
+(** Total fees.
 
     {v
     MATCH (t:Transaction)
     RETURN sum(t.fee) AS value;
     v} *)
-let sum_fees store =
+let total_fees store =
   let last_height = Query.last_block_height store in
   let total = ref 0L in
   for height = 0 to last_height do
@@ -194,7 +194,7 @@ let sum_fees store =
   done;
   !total
 
-(** Find maximum value of any spent output.
+(** Max input value.
 
     {v
     MATCH ()-[:TX_INPUT]->(o:Output)
@@ -220,7 +220,7 @@ let max_input_value store =
   done;
   !max_val
 
-(** Count transactions with version > 1.
+(** Tx version > 1.
 
     {v
     MATCH (t:Transaction)
@@ -239,118 +239,9 @@ let tx_version_gt_1 store =
   done;
   !count
 
-(** Count total number of inputs.
-
-    {v
-    MATCH ()-[r:TX_INPUT]->()
-    RETURN count(r) AS value;
-    v} *)
-let input_count store =
-  let last_height = Query.last_block_height store in
-  let count = ref 0 in
-  for height = 0 to last_height do
-    let txs = Query.block_transactions store height in
-    List.iter
-      (fun (tx : Types.transaction) ->
-        let inputs = Query.tx_inputs store tx.tx_id in
-        count := !count + List.length inputs)
-      txs
-  done;
-  !count
-
-(** Count total number of outputs.
-
-    {v
-    MATCH (o:Output)
-    RETURN count(o) AS value;
-    v} *)
-let output_count store =
-  let last_height = Query.last_block_height store in
-  let count = ref 0 in
-  for height = 0 to last_height do
-    let txs = Query.block_transactions store height in
-    List.iter
-      (fun (tx : Types.transaction) ->
-        let outputs = Query.tx_outputs store tx.tx_id in
-        count := !count + List.length outputs)
-      txs
-  done;
-  !count
-
-(** {1 Basic Counts} *)
-
-(** Count blocks.
-
-    {v
-    MATCH (b:Block)
-    RETURN count(b) AS value;
-    v} *)
-let block_count store = Query.last_block_height store + 1
-
-(** Count transactions.
-
-    {v
-    MATCH (t:Transaction)
-    RETURN count(t) AS value;
-    v} *)
-let transaction_count store =
-  let last_height = Query.last_block_height store in
-  let count = ref 0 in
-  for height = 0 to last_height do
-    let txs = Query.block_transactions store height in
-    count := !count + List.length txs
-  done;
-  !count
-
-(** Count spent outputs.
-
-    {v
-    MATCH (o:Output)<-[:TX_INPUT]-()
-    RETURN count(o) AS value;
-    v} *)
-let spent_output_count store =
-  let last_height = Query.last_block_height store in
-  let count = ref 0 in
-  for height = 0 to last_height do
-    let txs = Query.block_transactions store height in
-    List.iter
-      (fun (tx : Types.transaction) ->
-        let outputs = Query.tx_outputs store tx.tx_id in
-        List.iter
-          (fun (o : Types.output) ->
-            if Query.is_output_spent store o.out_tx_id o.out_vout then incr count)
-          outputs)
-      txs
-  done;
-  !count
-
-(** Count unspent outputs (UTXOs).
-
-    {v
-    MATCH (o:Output)
-    WHERE NOT (o)<-[:TX_INPUT]-()
-    RETURN count(o) AS value;
-    v} *)
-let utxo_count store =
-  let last_height = Query.last_block_height store in
-  let count = ref 0 in
-  for height = 0 to last_height do
-    let txs = Query.block_transactions store height in
-    List.iter
-      (fun (tx : Types.transaction) ->
-        let outputs = Query.tx_outputs store tx.tx_id in
-        List.iter
-          (fun (o : Types.output) ->
-            if not (Query.is_output_spent store o.out_tx_id o.out_vout) then
-              incr count)
-          outputs)
-      txs
-  done;
-  !count
-
 (** {1 Block Statistics} *)
 
-(** Average transactions per block.
+(** Avg tx per block.
 
     {v
     MATCH (b:Block)-[:CONTAINS]->(t:Transaction)
@@ -367,7 +258,7 @@ let avg_tx_per_block store =
   if last_height < 0 then 0.0
   else float_of_int !total_tx /. float_of_int (last_height + 1)
 
-(** Maximum transactions in a single block.
+(** Max tx per block.
 
     {v
     MATCH (b:Block)-[:CONTAINS]->(t:Transaction)
@@ -384,16 +275,64 @@ let max_tx_per_block store =
   done;
   !max_tx
 
+(** {1 UTXO Queries} *)
+
+(** Spent outputs.
+
+    {v
+    MATCH (o:Output)<-[:TX_INPUT]-()
+    RETURN count(o) AS value;
+    v} *)
+let spent_outputs store =
+  let last_height = Query.last_block_height store in
+  let count = ref 0 in
+  for height = 0 to last_height do
+    let txs = Query.block_transactions store height in
+    List.iter
+      (fun (tx : Types.transaction) ->
+        let outputs = Query.tx_outputs store tx.tx_id in
+        List.iter
+          (fun (o : Types.output) ->
+            if Query.is_output_spent store o.out_tx_id o.out_vout then incr count)
+          outputs)
+      txs
+  done;
+  !count
+
+(** Unspent outputs (UTXOs).
+
+    {v
+    MATCH (o:Output)
+    WHERE NOT (o)<-[:TX_INPUT]-()
+    RETURN count(o) AS value;
+    v} *)
+let unspent_outputs store =
+  let last_height = Query.last_block_height store in
+  let count = ref 0 in
+  for height = 0 to last_height do
+    let txs = Query.block_transactions store height in
+    List.iter
+      (fun (tx : Types.transaction) ->
+        let outputs = Query.tx_outputs store tx.tx_id in
+        List.iter
+          (fun (o : Types.output) ->
+            if not (Query.is_output_spent store o.out_tx_id o.out_vout) then
+              incr count)
+          outputs)
+      txs
+  done;
+  !count
+
 (** {1 Advanced Queries} *)
 
-(** Count transactions with fee > 10 BTC.
+(** High value tx (fee > 10 BTC).
 
     {v
     MATCH (t:Transaction)
     WHERE t.fee > 1000000000
     RETURN count(t) AS value;
     v} *)
-let high_fee_tx_count store =
+let high_value_tx store =
   let last_height = Query.last_block_height store in
   let count = ref 0 in
   let threshold = 1_000_000_000L in (* 10 BTC in satoshis *)
@@ -406,7 +345,7 @@ let high_fee_tx_count store =
   done;
   !count
 
-(** Count transactions with more than 10 inputs.
+(** Multi-input tx (> 10 inputs).
 
     {v
     MATCH (t:Transaction)-[:TX_INPUT]->()
@@ -414,7 +353,7 @@ let high_fee_tx_count store =
     WHERE inputs > 10
     RETURN count(t) AS value;
     v} *)
-let multi_input_tx_count store =
+let multi_input_tx store =
   let last_height = Query.last_block_height store in
   let count = ref 0 in
   for height = 0 to last_height do
@@ -427,192 +366,49 @@ let multi_input_tx_count store =
   done;
   !count
 
-(** {1 Verification Queries} *)
-
-(** Get genesis block info.
-
-    {v
-    MATCH (b:Block {height: 0})
-    RETURN b.hash AS genesis_hash, b.timestamp AS genesis_timestamp;
-    v} *)
-let genesis_block store = Query.get_block store 0
-
-(** Count transactions in block 170 (first real transaction).
-
-    {v
-    MATCH (b:Block {height: 170})-[:CONTAINS]->(t:Transaction)
-    RETURN count(t) AS tx_count;
-    v} *)
-let block_170_tx_count store =
-  let txs = Query.block_transactions store 170 in
-  List.length txs
-
-(** Script type distribution.
-
-    {v
-    MATCH (o:Output)
-    RETURN o.scriptType AS script_type, count(o) AS count
-    ORDER BY count DESC;
-    v} *)
-let script_type_distribution store =
-  let last_height = Query.last_block_height store in
-  let counts = Hashtbl.create 10 in
-  for height = 0 to last_height do
-    let txs = Query.block_transactions store height in
-    List.iter
-      (fun (tx : Types.transaction) ->
-        let outputs = Query.tx_outputs store tx.tx_id in
-        List.iter
-          (fun (o : Types.output) ->
-            let current =
-              match Hashtbl.find_opt counts o.out_script_type with
-              | Some n -> n
-              | None -> 0
-            in
-            Hashtbl.replace counts o.out_script_type (current + 1))
-          outputs)
-      txs
-  done;
-  let items = Hashtbl.fold (fun k v acc -> (k, v) :: acc) counts [] in
-  List.sort (fun (_, a) (_, b) -> compare b a) items
-
 (** {1 Main benchmark runner} *)
 
 let run_benchmarks store =
-  let last_height = Query.last_block_height store in
-  Printf.printf "Store has %d blocks\n\n" (last_height + 1);
-
-  (* Paper Queries (Table 7) *)
-  Printf.printf "=== Paper Queries (Table 7) ===\n\n";
-
-  let count =
-    time_it "Q1: Tx locktime > 0" (fun () -> q1_locktime_nonzero store)
-  in
-  Printf.printf "     Result: %d transactions\n\n" count;
-
-  let max_output =
-    time_it "Q2: Max output value" (fun () -> q2_max_output_value store)
-  in
-  Printf.printf "     Result: %Ld satoshis (%.2f BTC)\n\n" max_output
-    (Query.satoshis_to_btc max_output);
-
-  let max_fee = time_it "Q3: Max fee" (fun () -> q3_max_fee store) in
-  Printf.printf "     Result: %Ld satoshis (%.4f BTC)\n\n" max_fee
-    (Query.satoshis_to_btc max_fee);
-
-  let addr_total =
-    time_it "Q4: Address total received (addr 0)" (fun () ->
-        q4_address_total_received store "0")
-  in
-  Printf.printf "     Result: %Ld satoshis (%.2f BTC)\n\n" addr_total
-    (Query.satoshis_to_btc addr_total);
-
-  let zero_conf =
-    time_it "Q5: Zero-conf outputs" (fun () -> q5_zero_conf_outputs store)
-  in
-  Printf.printf "     Result: %d outputs\n\n" zero_conf;
-
-  let locktime_change =
-    time_it "Q6: Locktime change heuristic" (fun () -> q6_locktime_change store)
-  in
-  Printf.printf "     Result: %d transactions\n\n" locktime_change;
-
-  (* Additional Queries *)
-  Printf.printf "=== Additional Queries ===\n\n";
-
-  let sum_out =
-    time_it "Sum output value" (fun () -> sum_output_value store)
-  in
-  Printf.printf "     Result: %Ld satoshis (%.2f BTC)\n\n" sum_out
-    (Query.satoshis_to_btc sum_out);
-
-  let sum_f = time_it "Sum fees" (fun () -> sum_fees store) in
-  Printf.printf "     Result: %Ld satoshis (%.4f BTC)\n\n" sum_f
-    (Query.satoshis_to_btc sum_f);
-
-  let max_inp =
-    time_it "Max input value" (fun () -> max_input_value store)
-  in
-  Printf.printf "     Result: %Ld satoshis (%.2f BTC)\n\n" max_inp
-    (Query.satoshis_to_btc max_inp);
-
-  let ver_gt_1 =
-    time_it "Tx version > 1" (fun () -> tx_version_gt_1 store)
-  in
-  Printf.printf "     Result: %d transactions\n\n" ver_gt_1;
-
-  let inp_cnt = time_it "Input count" (fun () -> input_count store) in
-  Printf.printf "     Result: %d inputs\n\n" inp_cnt;
-
-  let out_cnt = time_it "Output count" (fun () -> output_count store) in
-  Printf.printf "     Result: %d outputs\n\n" out_cnt;
+  results := [];
 
   (* Basic Counts *)
-  Printf.printf "=== Basic Counts ===\n\n";
+  let _ = time_it "Block count" (fun () -> Int64.of_int (block_count store)) in
+  let _ = time_it "Tx count" (fun () -> Int64.of_int (tx_count store)) in
+  let _ = time_it "Input count" (fun () -> Int64.of_int (input_count store)) in
+  let _ = time_it "Output count" (fun () -> Int64.of_int (output_count store)) in
+  let _ = time_it "Address count" (fun () -> Int64.of_int (address_count store)) in
 
-  let blk_cnt = time_it "Block count" (fun () -> block_count store) in
-  Printf.printf "     Result: %d blocks\n\n" blk_cnt;
+  (* Paper Queries (Table 7) *)
+  let _ = time_it "Tx locktime > 0" (fun () -> Int64.of_int (tx_locktime_gt_0 store)) in
+  let _ = time_it "Max output value" (fun () -> max_output_value store) in
+  let _ = time_it "Calculate fee" (fun () -> calculate_fee store) in
 
-  let tx_cnt = time_it "Transaction count" (fun () -> transaction_count store) in
-  Printf.printf "     Result: %d transactions\n\n" tx_cnt;
-
-  let spent_cnt =
-    time_it "Spent output count" (fun () -> spent_output_count store)
-  in
-  Printf.printf "     Result: %d spent outputs\n\n" spent_cnt;
-
-  let utxo_cnt = time_it "UTXO count" (fun () -> utxo_count store) in
-  Printf.printf "     Result: %d UTXOs\n\n" utxo_cnt;
+  (* Additional Queries *)
+  let _ = time_it "Total output value" (fun () -> total_output_value store) in
+  let _ = time_it "Total fees" (fun () -> total_fees store) in
+  let _ = time_it "Max input value" (fun () -> max_input_value store) in
+  let _ = time_it "Tx version > 1" (fun () -> Int64.of_int (tx_version_gt_1 store)) in
 
   (* Block Statistics *)
-  Printf.printf "=== Block Statistics ===\n\n";
+  let _ = time_it "Avg tx per block" (fun () -> Int64.of_float (avg_tx_per_block store *. 1000.0)) in
+  let _ = time_it "Max tx per block" (fun () -> Int64.of_int (max_tx_per_block store)) in
 
-  let avg_tx = time_it "Avg tx per block" (fun () -> avg_tx_per_block store) in
-  Printf.printf "     Result: %.2f transactions\n\n" avg_tx;
-
-  let max_tx = time_it "Max tx per block" (fun () -> max_tx_per_block store) in
-  Printf.printf "     Result: %d transactions\n\n" max_tx;
+  (* UTXO Queries *)
+  let _ = time_it "Spent outputs" (fun () -> Int64.of_int (spent_outputs store)) in
+  let _ = time_it "Unspent outputs" (fun () -> Int64.of_int (unspent_outputs store)) in
 
   (* Advanced Queries *)
-  Printf.printf "=== Advanced Queries ===\n\n";
+  let _ = time_it "High value tx" (fun () -> Int64.of_int (high_value_tx store)) in
+  let _ = time_it "Multi-input tx" (fun () -> Int64.of_int (multi_input_tx store)) in
 
-  let high_fee =
-    time_it "High-fee tx (>10 BTC)" (fun () -> high_fee_tx_count store)
-  in
-  Printf.printf "     Result: %d transactions\n\n" high_fee;
+  ()
 
-  let multi_inp =
-    time_it "Multi-input tx (>10 inputs)" (fun () -> multi_input_tx_count store)
-  in
-  Printf.printf "     Result: %d transactions\n\n" multi_inp;
-
-  (* Verification Queries *)
-  Printf.printf "=== Verification Queries ===\n\n";
-
-  let genesis =
-    time_it "Genesis block" (fun () -> genesis_block store)
-  in
-  (match genesis with
-   | Some b ->
-       Printf.printf "     Hash: %s\n" b.Types.hash;
-       Printf.printf "     Timestamp: %Ld\n\n" b.Types.timestamp
-   | None -> Printf.printf "     Not found\n\n");
-
-  let b170_tx =
-    time_it "Block 170 tx count" (fun () -> block_170_tx_count store)
-  in
-  Printf.printf "     Result: %d transactions\n\n" b170_tx;
-
-  let script_dist =
-    time_it "Script type distribution" (fun () -> script_type_distribution store)
-  in
-  Printf.printf "     Result:\n";
+let output_csv () =
+  Printf.printf "Query,Time_ms,Result\n";
   List.iter
-    (fun (script_type, count) ->
-      Printf.printf "       %s: %d\n" script_type count)
-    script_dist;
-
-  Printf.printf "\nBenchmark complete.\n"
+    (fun (name, time_ms, result) ->
+      Printf.printf "%s,%.3f,%Ld\n" name time_ms result)
+    (List.rev !results)
 
 (** {1 CLI} *)
 
@@ -624,15 +420,14 @@ let run_with_store ~sw ~fs store_path =
   let main = Store.main repo in
   Fun.protect
     ~finally:(fun () -> Store.Store.Repo.close repo)
-    (fun () -> run_benchmarks main)
+    (fun () ->
+      run_benchmarks main;
+      output_csv ())
 
 let () =
   let store_path =
     if Array.length Sys.argv > 1 then Sys.argv.(1) else default_store
   in
-  Printf.printf "BlockSci Benchmark Suite\n";
-  Printf.printf "========================\n";
-  Printf.printf "Store: %s\n\n" store_path;
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let fs = Eio.Stdenv.fs env in
