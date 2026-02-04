@@ -51,6 +51,7 @@ type entity =
   | OutputRef of output_ref
   | TxRef of int
   | AddrRef of string
+  | Meta of string
 
 let block_to_json b =
   Printf.sprintf
@@ -87,6 +88,7 @@ let entity_to_json = function
   | OutputRef r -> output_ref_to_json r
   | TxRef tx_id -> Printf.sprintf {|{"type":"txref","id":%d}|} tx_id
   | AddrRef addr -> Printf.sprintf {|{"type":"addrref","addr":"%s"}|} addr
+  | Meta data -> Printf.sprintf {|{"type":"meta","data":"%s"}|} data
 
 let parse_int64 s = Int64.of_string s
 let parse_int s = int_of_string s
@@ -237,5 +239,9 @@ let json_to_entity json =
       | "addrref" -> (
           match find_field json "addr" with
           | Some a -> Some (AddrRef (parse_string a))
+          | None -> None)
+      | "meta" -> (
+          match find_field json "data" with
+          | Some d -> Some (Meta (parse_string d))
           | None -> None)
       | _ -> None)
